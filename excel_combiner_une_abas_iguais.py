@@ -334,12 +334,11 @@ def combine_excel_files_worker(files, output_file, heading_rows, delete_rows, in
     try:
         combined_wb = openpyxl.Workbook()
         combined_ws = combined_wb.active
-        combined_ws.title = "Combined Data"
         
         load_data_only = not preserve_formulas
         style_cache.clear()
 
-        aba_row = {} #dicionario do início da linha de cada aba para colar valores.
+        tgt_row_idx = {} #dicionario do início da linha para colar valores corretamente nas respectivas abas do excel
 
         for i, file_path in enumerate(files):
             if cancel_event.is_set():
@@ -351,36 +350,34 @@ def combine_excel_files_worker(files, output_file, heading_rows, delete_rows, in
             progress_queue.put({'type': 'progress', 'step': i, 'status': status_text})
 
             wb = openpyxl.load_workbook(file_path, data_only=load_data_only)
-            #ws = wb.active
             filename = os.path.basename(file_path)
 
-            abas_file = wb.sheetnames #lista de abas do primeiro arquivo a ser unificado:
+            # Obtém lista de abas do arquivo a ser unificado:
+            file_sheetnames = wb.sheetnames
 
             if i == 0:
-                for aba in abas_file:
-                #cria todas as abas no arquivo de output, com os devidos nomes e ativa ela:
+                for sheet_name in file_sheetnames:
+                # Cria todas as abas que irão para o arquivo de output, com os devidos nomes e ativa ela a primeira aba:
+                    if file_sheetnames not in combined_wb.sheetnames:
+                        if combined_wb.sheetnames[0] != file_sheetnames[0]:
+                            combined_ws.title = sheet_name
+                        else:
+                            combined_wb.create_sheet(sheet_name)
 
-                    if abas_file not in combined_wb.sheetnames:
-                        combined_wb.create_sheet(aba)
-                        aba_row[aba] = 1
+                    tgt_row_idx[sheet_name] = 1 # Variável que ajuda a definir onde serão colados os valores em cada aba.
+                    ws = wb[sheet_name]
+                    combined_ws = combined_wb[sheet_name]
 
-                        if 'Combined Data' in combined_wb.sheetnames:
-                            combined_wb.remove(combined_wb['Combined Data'])
-
-                    ws = wb[aba]
-                    combined_ws = combined_wb[aba]
-
-                #roda o script
                     for src_row in range(1, heading_rows + 1):
-                        copy_row(ws, combined_ws, src_row, aba_row[aba], include_filename, filename)
-                        aba_row[aba] += 1
+                        copy_row(ws, combined_ws, src_row, tgt_row_idx[sheet_name], include_filename, filename)
+                        tgt_row_idx[sheet_name] += 1
                         copy_merged_cells(ws, combined_ws, 1, heading_rows, 1, include_filename)
 
                         data_start_row = heading_rows + 1
 
                     for src_row in range(data_start_row, ws.max_row + 1):
-                        copy_row(ws, combined_ws, src_row, aba_row[aba], include_filename, filename)
-                        aba_row[aba] += 1
+                        copy_row(ws, combined_ws, src_row, tgt_row_idx[sheet_name], include_filename, filename)
+                        tgt_row_idx[sheet_name] += 1
                         copy_merged_cells(ws, combined_ws, data_start_row, ws.max_row, heading_rows + 1, include_filename)
                 
                         col_offset = 1 if include_filename else 0
@@ -389,18 +386,18 @@ def combine_excel_files_worker(files, output_file, heading_rows, delete_rows, in
                         if dim.width:
                             combined_ws.column_dimensions[tgt_col_letter].width = dim.width
             else:
-                for aba in abas_file:
-                    ws = wb[aba]
-                    combined_ws = combined_wb[aba]
-                    # ativa a aba especifica e roda o script
+                for sheet_name in file_sheetnames:
+                    # Ativa a aba especifica e copia valores
+                    ws = wb[sheet_name]
+                    combined_ws = combined_wb[sheet_name]
 
                     start_row = delete_rows + 1
                     if start_row > ws.max_row: continue
 
-                    block_tgt_start_row = aba_row[aba]
+                    block_tgt_start_row = tgt_row_idx[sheet_name]
                     for src_row in range(start_row, ws.max_row + 1):
-                        copy_row(ws, combined_ws, src_row, aba_row[aba], include_filename, filename)
-                        aba_row[aba] += 1
+                        copy_row(ws, combined_ws, src_row, tgt_row_idx[sheet_name], include_filename, filename)
+                        tgt_row_idx[sheet_name] += 1
                         copy_merged_cells(ws, combined_ws, start_row, ws.max_row, block_tgt_start_row, include_filename)
         
         progress_queue.put({'type': 'progress', 'step': len(files), 'status': 'Saving combined file...'})
