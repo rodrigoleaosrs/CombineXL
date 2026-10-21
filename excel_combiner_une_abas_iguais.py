@@ -387,9 +387,35 @@ def combine_excel_files_worker(files, output_file, heading_rows, delete_rows, in
                             combined_ws.column_dimensions[tgt_col_letter].width = dim.width
             else:
                 for sheet_name in file_sheetnames:
-                    
-                    #Se a aba não existe no arquivo inicial, não compila.
-                    if wb[sheet_name] not in combined_wb.sheetnames:
+
+                    #Se a aba deste arquivo sendo tratado não existe no arquivo inicial, precisa criar e inserir cabeçalho + dados.
+                    if sheet_name not in combined_wb.sheetnames:
+                        combined_wb.create_sheet(sheet_name) #Cria nova aba
+
+                        #Realiza tratativas para iniciar compilação dos dados
+                        tgt_row_idx[sheet_name] = 1  # Variável que ajuda a definir onde serão colados os valores em cada aba.
+
+                        #Realiza as tratativas para inserir o cabeçalho e os dados como se fosse no primeiro arquivo
+                        ws = wb[sheet_name]
+                        combined_ws = combined_wb[sheet_name]
+
+                        for src_row in range(1, heading_rows + 1):
+                            copy_row(ws, combined_ws, src_row, tgt_row_idx[sheet_name], include_filename, filename)
+                            tgt_row_idx[sheet_name] += 1
+                            copy_merged_cells(ws, combined_ws, 1, heading_rows, 1, include_filename)
+
+                            data_start_row = heading_rows + 1
+
+                        for src_row in range(data_start_row, ws.max_row + 1):
+                            copy_row(ws, combined_ws, src_row, tgt_row_idx[sheet_name], include_filename, filename)
+                            tgt_row_idx[sheet_name] += 1
+                            copy_merged_cells(ws, combined_ws, data_start_row, ws.max_row, heading_rows + 1, include_filename)
+
+                            col_offset = 1 if include_filename else 0
+                        for col_letter, dim in ws.column_dimensions.items():
+                            tgt_col_letter = get_column_letter(openpyxl.utils.column_index_from_string(col_letter) + col_offset)
+                            if dim.width:
+                                combined_ws.column_dimensions[tgt_col_letter].width = dim.width
                         continue
 
                     # Ativa a aba especifica e copia valores
