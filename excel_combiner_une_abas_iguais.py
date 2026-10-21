@@ -387,8 +387,7 @@ def combine_excel_files_worker(files, output_file, heading_rows, delete_rows, in
                             combined_ws.column_dimensions[tgt_col_letter].width = dim.width
             else:
                 for sheet_name in file_sheetnames:
-                    print('cheguei aqui')
-
+                    
                     #Se a aba não existe no arquivo inicial, não compila.
                     if wb[sheet_name] not in combined_wb.sheetnames:
                         continue
